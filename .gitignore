@@ -219,5 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Local datasets (Caravan download)
-data/
+# Local data: raw attribute extracts, the per-gauge cache and recombined files are not tracked.
+# data/processed/ (the filtered subset built by src/build_subset.py, sharded) is committed for the team.
+data/raw/
+data/interim/
+data/combined/
