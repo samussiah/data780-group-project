@@ -50,6 +50,7 @@ def main() -> None:
                 pandoc,
                 "--from=markdown+tex_math_dollars",
                 "--to=latex",
+                "--natbib",  # [@key] -> \citep{key}, resolved by references.bib
                 f"--output={output}",
                 str(source),
             ],
