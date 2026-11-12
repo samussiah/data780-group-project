@@ -14,6 +14,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SOURCE_DIR = REPO / "docs" / "md"
 OUTPUT_DIR = REPO / "docs" / "tex"
+# Not converted: references live in docs/tex/references.bib (hand-maintained).
+SKIP = {"references.md"}
 
 
 def main() -> None:
@@ -21,7 +23,9 @@ def main() -> None:
     if pandoc is None:
         raise SystemExit("Pandoc is required but was not found on PATH.")
 
-    markdown_files = sorted(SOURCE_DIR.rglob("*.md"))
+    markdown_files = sorted(
+        p for p in SOURCE_DIR.rglob("*.md") if p.name not in SKIP
+    )
     if not markdown_files:
         print(f"No Markdown files found in {SOURCE_DIR}")
         return
