@@ -224,3 +224,6 @@ __marimo__/
 data/raw/
 data/interim/
 data/combined/
+
+# Copyrighted publications: keep local, cite via docs/md/references.md
+docs/publications/
