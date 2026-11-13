@@ -68,11 +68,19 @@ supervised learning method for streamflow prediction. LightGBM is a
 gradient-boosted decision tree framework that can accommodate nonlinear
 relationships and interactions between meteorological and catchment
 characteristics. For this model, 3 different configurations will be
-compared to determine best performance: - No catchment information: The
-model will use meteorological forcing variables without static catchment
-attributes or cluster identifiers. - Cluster-based information: The
-model will incorporate meteorological forcing variables and the
-corresponding unsupervised cluster identifier derived from the k-means
-clustering model. - Raw catchment attributes: The model will incorporate
-meteorological forcing variables and the complete set of selected static
-catchment attributes prior to log transformation.
+compared to determine best performance:
+
+\begin{itemize}
+\tightlist
+\item
+  No catchment information: The model will use meteorological forcing
+  variables without static catchment attributes or cluster identifiers.
+\item
+  Cluster-based information: The model will incorporate meteorological
+  forcing variables and the corresponding unsupervised cluster
+  identifier derived from the k-means clustering model.
+\item
+  Raw catchment attributes: The model will incorporate meteorological
+  forcing variables and the complete set of selected static catchment
+  attributes prior to log transformation.
+\end{itemize}

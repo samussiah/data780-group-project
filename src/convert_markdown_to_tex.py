@@ -15,9 +15,20 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SOURCE_DIR = REPO / "docs" / "md"
 OUTPUT_DIR = REPO / "docs" / "tex"
+FIGURES_SRC = SOURCE_DIR / "figures"
+FIGURES_DST = OUTPUT_DIR / "figures"
 ARCHIVE = REPO / "docs" / "tex.zip"  # gitignored; upload to Overleaf
 # Not converted: references live in docs/tex/references.bib (hand-maintained).
 SKIP = {"references.md"}
+
+
+def copy_figures() -> None:
+    """Copy docs/md/figures to docs/tex/figures so they ship in the archive."""
+    if not FIGURES_SRC.is_dir():
+        return
+    shutil.copytree(FIGURES_SRC, FIGURES_DST, dirs_exist_ok=True)
+    count = sum(1 for p in FIGURES_SRC.rglob("*") if p.is_file())
+    print(f"Copied {count} figure(s) -> {FIGURES_DST.relative_to(REPO)}")
 
 
 def archive_tex() -> None:
@@ -39,6 +50,7 @@ def main() -> None:
     )
     if not markdown_files:
         print(f"No Markdown files found in {SOURCE_DIR}")
+        copy_figures()
         archive_tex()
         return
 
@@ -58,6 +70,7 @@ def main() -> None:
         )
         print(f"{source.relative_to(REPO)} -> {output.relative_to(REPO)}")
 
+    copy_figures()
     archive_tex()
 
 

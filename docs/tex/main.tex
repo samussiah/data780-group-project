@@ -24,6 +24,16 @@
 \date{\today}
 % `preprint` shows author names (the default mode prints "Anonymous Author(s)")
 \usepackage[preprint]{nips_2018}
+\usepackage{graphicx}  % figures from docs/md/figures
+\providecommand{\pandocbounded}[1]{#1}  % newer Pandoc wraps images in this
+\providecommand{\tightlist}{%  % Pandoc emits this inside compact lists
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% Keep figures where they appear in the text instead of floating to the end
+\usepackage{float}
+\floatplacement{figure}{H}
+% nips_2018 sets \flushbottom, which stretches list/paragraph spacing on pages
+% left short by an H figure; let short pages stay short instead
+\raggedbottom
 
 \begin{document}
 
