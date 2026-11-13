@@ -12,10 +12,10 @@ The remaining work will focus on the leakage-safe US/AUS comparison and whether 
 
 - **December 3 — Revision and reproducibility:** Spencer leads revisions; Jay verifies data claims; Ryan runs the clean-environment check.
 
-- **December 6 — Presentation and internal release:** Ryan prepares slides; Spencer and Jay review; all rehearse.
+- **December 5 — Final quality checks and presentation prep:** All review the paper and submission files; Ryan leads slide preparation; Spencer coordinates.
 
-- **December 7–9 — Final quality checks:** All review compilation, wording, and submission requirements; Spencer coordinates.
+- **December 6 — Final report submission:** Spencer coordinates; all confirm the final report and accompanying files.
 
-- **December 10 — Final report submission:** Spencer coordinates; all confirm the final files and results.
+- **December 7 — Presentation:** Ryan leads the presentation; all teammates present and respond to questions.
 
 Optional work (synthetic benchmark, CAMELS-GB, cross-region transfer, kernel regression, or expanded SHAP) will not delay the November 22 freeze; retain only a minimal synthetic positive control if the course requires it and time permits.
