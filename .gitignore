@@ -224,3 +224,9 @@ __marimo__/
 data/raw/
 data/interim/
 data/combined/
+
+# Copyrighted publications: keep local, cite via docs/md/references.md
+docs/publications/
+
+# Overleaf upload archive built by src/convert_markdown_to_tex.py
+docs/tex.zip
