@@ -1,0 +1,24 @@
+# Methods
+
+The dataset will be derived from the Caravan v1.6 CSV release, specifically looking at US basins (camels), Great Britain basins (camelsgb), and Australia basins (camelsaus), totaling 1760 basins. Measurments for all basins will be daily from 1981-2014. Basins will be kept for analysis based on overall quality and completeness.
+
+Static attributes for the kept basins will represent the physical and environmental characteristics of each basin. These attributes will be standardized prior to clustering and model development, with all preprocessing parameters estimated exclusively from the training catchments within each validation fold.
+
+To prevent information leakage, catchment attributes derived directly from observed streamflow or other discharge-related measurements will be excluded from the predictor set. The remaining static catchment attributes will be examined for missing values, inconsistencies, and potential redundancy before model development.
+
+Meteorological predictors will be constructed using fixed time intervals of 7, 30, 90, and 365 days. These intervals will capture short-term and longer-term hydrological and climatic conditions that may influence streamflow behavior, all of which will be applied consistently across all models.
+
+The target variable, daily streamflow, will be log-transformed to reduce the influence of highly skewed flow distributions and improve model stability. Predictions will subsequently be evaluated in both transformed and original flow spaces to assess the implications of the transformation and back-transformation procedure.
+
+Prior to model fitting, basins will be split into training and test sets. All preprocessing operations, including feature scaling and any dimensionality reduction, will be fitted independently within each training fold. This procedure will ensure that information from held-out catchments does not influence model development.
+
+The scope of this analysis will involve the usage of several machine learning methods, both supervised and unsupervised.  Ridge regression will serve as a baseline supervised method, and it will be run on lagged weather measurements and accuracy of nearest-gauge transfer.
+
+After establishing a baseline ridge regression model, k-means clustering will be applied to the static catchment attributes to identify groups of physically similar river basins. Catchments will be classified into groups based on their similarity across the selected standardized attributes. The number of clusters (k) will be evaluated across three to four candidate values. This will allow the study to examine whether the granularity of catchment groupings influences predictive performance. Once clustering is done, each catchment will be assigned a cluster identifier. This identifier will subsequently serve as an alternative representation of catchment characteristics in the supervised methods.
+
+An important consideration is that cluster membership is derived directly from the underlying catchment attributes. Consequently, cluster identifiers do not introduce additional information beyond the original attributes. Instead, they provide a potentially more parsimonious representation of catchment similarity that may improve predictive performance when the available training sample is small. The hydrological coherence of the resulting clusters will also be examined to determine whether catchments grouped together based on physical characteristics demonstrate meaningful similarities in their observed streamflow behavior.
+
+Light Gradient Boosting Machine (LightGBM) will serve as the primary supervised learning method for streamflow prediction. LightGBM is a gradient-boosted decision tree framework that can accommodate nonlinear relationships and interactions between meteorological and catchment characteristics. For this model, 3 different configurations will be compared to determine best performance:
+- No catchment information: The model will use meteorological forcing variables without static catchment attributes or cluster identifiers.
+- Cluster-based information: The model will incorporate meteorological forcing variables and the corresponding unsupervised cluster identifier derived from the k-means clustering model.
+- Raw catchment attributes: The model will incorporate meteorological forcing variables and the complete set of selected static catchment attributes prior to log transformation.
