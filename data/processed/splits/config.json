@@ -26,5 +26,17 @@
   "buffer_km": 100,
   "min_train_years": 10,
   "min_test_years": 5,
-  "seed": 780
+  "seed": 780,
+  "log_eps": 0.01,
+  "windows": [
+    7,
+    30,
+    90,
+    365
+  ],
+  "window_vars": {
+    "total_precipitation_sum": "p",
+    "potential_evaporation_sum_ERA5_LAND": "pet",
+    "temperature_2m_mean": "t"
+  }
 }

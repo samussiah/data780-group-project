@@ -68,5 +68,12 @@ Caveats for the attribute audit:
   - `basins.csv`: spatial block, fold, and valid years in the train and test periods for each basin.
   - `fold_roles.csv`: `test`/`train`/`buffer` per fold and basin, plus each training basin's distance to the nearest test basin.
   - `config.json`: periods and parameters.
+- `features/`: static model inputs written by `notebooks/02_preprocessing.ipynb`:
+  - `static_attributes.parquet`: one row per US/AUS basin, with flow-derived, constant and full-record climate attributes removed, and climate indices recomputed from training-period forcing (`*_train`).
+  - `feature_groups.json`: the metadata, numeric and categorical column lists, plus each excluded attribute and the reason.
+
+### Daily model table (`data/features/`, git-ignored)
+
+`daily_<subset>.parquet` (about 700 MB in total) holds one row per basin and day from 1986-10-01 to 2014-09-30. Columns: `period` (`train`/`gap`/`test`), `streamflow`, `log_streamflow`, the 16 forcings, trailing 7/30/90/365-day means of precipitation, PET and temperature, and day-of-year sin/cos. It is too large to commit; run `notebooks/02_preprocessing.ipynb` (about 2 minutes) to build it.
 
 `data/combined/` (one parquet per region) and `data/raw/` are git-ignored caches.
