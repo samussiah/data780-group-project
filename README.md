@@ -1,11 +1,11 @@
 # data780-group-project
 ## Data
 
-`data/processed/` holds the Caravan subset used in this project (US `camels`, Great Britain `camelsgb`, Australia `camelsaus`; 1760 basins, daily 1981-2014), built from the Caravan v1.6 CSV release by `src/build_subset.py`.
+`data/processed/` holds the Caravan subset used in this project (US `camels`, Great Britain `camelsgb`, Australia `camelsaus`; daily 1981-2014). `src/build_subset.py` extracts it from the Caravan v1.6 CSV release **unfiltered**: all 1903 gauges in the three sub-datasets. The streamflow quality filter is applied in `notebooks/01_preprocessing.ipynb`, which keeps 1828 of them (667 US, 541 AUS, 620 GB).
 
-- `attributes.parquet`: static attributes for the kept basins (index `gauge_id`, column `subset`)
-- `basin_list.csv`, `quality_report.csv`: which basins were kept and why others were dropped
-- `timeseries/<subset>/part-N.parquet`: daily forcing + streamflow, sharded by gauge so each file stays under GitHub's 100 MB limit
+- `attributes.parquet`: static attributes for every extracted gauge (index `gauge_id`, column `subset`)
+- `timeseries/<subset>/part-N.parquet`: daily forcing + streamflow for every extracted gauge, sharded by gauge so each file stays under GitHub's 100 MB limit
+- `quality_report.csv`, `basin_list.csv`: written by notebook 02: which basins pass the quality filter and why others were dropped. **Filter on `basin_list.csv` when reading the time series or attributes directly.**
 
 Load a whole region with:
 
@@ -15,11 +15,13 @@ from combine_shards import load_timeseries
 us = load_timeseries("camels")  # sorted by (gauge_id, date)
 ```
 
-or run `python src/combine_shards.py` to write one parquet per region to `data/combined/` (git-ignored).
+or run `python src/combine_shards.py` to write one parquet per region to `data/combined/` (git-ignored). In code, `combine_shards.ensure_combined(subsets)` rebuilds those files only when they are missing or older than the shards, so a stale cache is never read after pulling new data.
+
+To change the quality filter (thresholds or window), edit the parameters at the top of `notebooks/01_preprocessing.ipynb` and rerun it; the committed data does not change. To re-extract from Caravan (other columns, dates or sub-datasets), run `python src/build_subset.py --archive PATH/TO/Caravan-csv.tar.gz`, or without `--archive` to stream it from Zenodo.
 
 ## Data overview
 
-The subset has three parts: daily time series (17 variables per basin), static attributes (216 columns per basin), and bookkeeping files. The modelling work uses US and AUS only; GB basins (588) are still in the files but are excluded by the splits in `data/processed/splits/`.
+The subset has three parts: daily time series (17 variables per basin), static attributes (216 columns per basin), and bookkeeping files. The modelling work uses US and AUS only; GB basins (620 kept) are still in the files but are excluded by the splits in `data/processed/splits/`.
 
 ### Daily time series (`timeseries/<subset>/`)
 
@@ -62,11 +64,18 @@ Caveats for the attribute audit:
 
 ### Bookkeeping files (`data/processed/`)
 
-- `quality_report.csv`: every gauge pulled from the archive, including dropped ones: record length, missing fraction, first and last valid dates, negative-flow count, and the `keep` flag.
-- `basin_list.csv`: kept gauge ids (makes the subset reproducible).
-- `splits/`: the train/test split design written by `notebooks/02_preprocessing.ipynb`:
+- `quality_report.csv`: every extracted gauge, including dropped ones, written by `notebooks/01_preprocessing.ipynb`: valid years and missing fraction over the quality window (1986-10-01 to 2014-09-30, the span that supplies training and test targets), first and last valid dates, negative-flow count, the `keep` flag and a `drop_reason`. A basin is kept with at least 15 valid years, at most 15% missing days in that window, and no negative flows.
+- `basin_list.csv`: kept gauge ids.
+- `splits/`: the train/test split design written by `notebooks/01_preprocessing.ipynb`:
   - `basins.csv`: spatial block, fold, and valid years in the train and test periods for each basin.
   - `fold_roles.csv`: `test`/`train`/`buffer` per fold and basin, plus each training basin's distance to the nearest test basin.
   - `config.json`: periods and parameters.
+- `features/`: static model inputs written by `notebooks/01_preprocessing.ipynb`:
+  - `static_attributes.parquet`: one row per US/AUS basin, with flow-derived, constant and full-record climate attributes removed, and climate indices recomputed from training-period forcing (`*_train`).
+  - `feature_groups.json`: the metadata, numeric and categorical column lists, plus each excluded attribute and the reason.
+
+### Daily model table (`data/features/`, git-ignored)
+
+`daily_<subset>.parquet` (about 700 MB in total) holds one row per basin and day from 1986-10-01 to 2014-09-30. Columns: `period` (`train`/`gap`/`test`), `streamflow`, `log_streamflow`, the 16 forcings, trailing 7/30/90/365-day means of precipitation, PET and temperature, and day-of-year sin/cos. It is too large to commit; run `notebooks/01_preprocessing.ipynb` (about 2 minutes) to build it.
 
 `data/combined/` (one parquet per region) and `data/raw/` are git-ignored caches.

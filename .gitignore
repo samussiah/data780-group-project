@@ -224,6 +224,8 @@ __marimo__/
 data/raw/
 data/interim/
 data/combined/
+# Daily model table written by notebooks/02_preprocessing.ipynb (about 1 GB; rebuild by running the notebook)
+data/features/
 
 # Copyrighted publications: keep local, cite via docs/md/references.md
 docs/publications/
