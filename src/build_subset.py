@@ -15,7 +15,7 @@ A second stage then runs on the local cache only (no network) and writes EVERY e
                                       stays under GitHub's 100 MB limit; read a whole region with
                                       pd.read_parquet('<out>/timeseries/<subset>/')
 
-No quality filtering happens here. notebooks/02_preprocessing.ipynb computes the per-gauge quality report,
+No quality filtering happens here. notebooks/01_preprocessing.ipynb computes the per-gauge quality report,
 applies the record-length / missingness filters and writes <out>/quality_report.csv and <out>/basin_list.csv,
 so the thresholds can change without touching the committed data.
 
