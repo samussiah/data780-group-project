@@ -21,6 +21,12 @@
       "2014-09-30"
     ]
   },
+  "quality_window": [
+    "1986-10-01",
+    "2014-09-30"
+  ],
+  "min_valid_years": 15,
+  "max_missing_frac": 0.15,
   "block_km": 300,
   "n_folds": 5,
   "buffer_km": 100,

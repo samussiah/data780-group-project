@@ -38,6 +38,26 @@ def load_timeseries(subset: str, processed_dir: Path = PROCESSED, columns: list[
     return df.sort_values(["gauge_id", "date"], ignore_index=True)
 
 
+def ensure_combined(subsets: list[str], processed_dir: Path = PROCESSED, combined_dir: Path = COMBINED) -> list[str]:
+    """(Re)build data/combined/<subset>.parquet when it is missing or older than any of its shards.
+
+    The combined files are a git-ignored cache, so after pulling new shards an existence check alone would
+    silently read stale data. Returns the sub-datasets that were rebuilt.
+    """
+    stale = []
+    for s in subsets:
+        out = combined_dir / f"{s}.parquet"
+        shards = list((processed_dir / "timeseries" / s).glob("part-*.parquet"))
+        if not shards:
+            raise FileNotFoundError(f"no shards for {s} in {processed_dir / 'timeseries'}")
+        if not out.exists() or out.stat().st_mtime < max(p.stat().st_mtime for p in shards):
+            stale.append(s)
+    if stale:
+        print("combined files missing or older than their shards:", stale, "-> rebuilding")
+        main(stale)
+    return stale
+
+
 def main(subsets: list[str]):
     COMBINED.mkdir(parents=True, exist_ok=True)
     for s in subsets or available_subsets():

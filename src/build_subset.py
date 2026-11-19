@@ -1,29 +1,31 @@
-"""Build a manageable Caravan subset from the 29 GB Zenodo CSV release.
+"""Extract a manageable Caravan subset from the 29 GB Zenodo CSV release.
 
 Caravan-csv.tar.gz is one gzip stream, so individual files can't be fetched. This script makes a
 single streaming pass over it (nothing like 29 GB is written to disk):
 
-  1. attributes for the chosen sub-datasets are saved to <out>/attributes/ (they come first in the
+  1. attributes for the chosen sub-datasets are saved to <raw>/attributes/ (they come first in the
      archive, which also tells us which gauge ids to expect),
   2. each wanted time series is trimmed to the chosen columns + date window and cached as a small
      float32 parquet file in <interim>/<subset>/,
   3. the stream stops as soon as every expected gauge has been seen.
 
-A second stage then runs on the local cache only (no network): it computes a per-gauge quality
-report, applies the record-length / missingness filters, and writes
-  <out>/attributes.parquet            merged attributes of the kept basins (index gauge_id, col subset)
-  <out>/timeseries/<subset>/part-N.parquet   long format (gauge_id, date, ...) for the kept basins, sharded by
-                                      gauge so each file stays under GitHub's 100 MB limit; read a whole region
-                                      with pd.read_parquet('<out>/timeseries/<subset>/')
-  <out>/quality_report.csv            stats for every pulled gauge, kept or not
-  <out>/basin_list.csv                kept gauge ids (commit this one; it makes the subset reproducible)
+A second stage then runs on the local cache only (no network) and writes EVERY extracted gauge, unfiltered:
+  <out>/attributes.parquet            merged attributes (index gauge_id, col subset)
+  <out>/timeseries/<subset>/part-N.parquet   long format (gauge_id, date, ...), sharded by gauge so each file
+                                      stays under GitHub's 100 MB limit; read a whole region with
+                                      pd.read_parquet('<out>/timeseries/<subset>/')
 
-Re-running skips gauges already cached. Re-apply different filters without re-downloading with
---skip-pull. If you already have the archive locally, pass --archive PATH.
+No quality filtering happens here. notebooks/02_preprocessing.ipynb computes the per-gauge quality report,
+applies the record-length / missingness filters and writes <out>/quality_report.csv and <out>/basin_list.csv,
+so the thresholds can change without touching the committed data.
+
+Re-running skips gauges already cached. Rewrite the outputs from the cache alone with --skip-pull.
+If you already have the archive locally, pass --archive PATH.
 
 Usage:
-    python src/build_subset.py                       # camels + camelsgb + camelsaus
-    python src/build_subset.py --skip-pull --min-valid-years 20
+    python src/build_subset.py                                        # stream from Zenodo
+    python src/build_subset.py --archive ~/Downloads/Caravan-csv.tar.gz
+    python src/build_subset.py --skip-pull                            # rewrite outputs from the cache
 """
 from __future__ import annotations
 
@@ -160,86 +162,61 @@ def pull(subsets, columns, start, end, raw_dir, interim_dir, archive, retries):
                 print(f"[warn] {s}: {len(gone)} attribute rows have no time series file")
 
 
-# --------------------------------------------------------------------------- stage 2: filter & combine
-def combine(subsets, raw_dir, interim_dir, out_dir, start, end, min_valid_years, max_missing_frac, shards):
+# --------------------------------------------------------------------------- stage 2: write outputs
+def combine(subsets, raw_dir, interim_dir, out_dir, shards):
+    """Write every cached gauge (no filtering) as sharded long-format parquet plus merged attributes."""
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "timeseries").mkdir(exist_ok=True)
 
-    # per-gauge quality over the requested window
-    n_window = len(pd.date_range(start, end))
-    rows, series = [], {}
+    all_ids = []
     for s in subsets:
         files = sorted((interim_dir / s).glob("*.parquet"))
         if not files:
             print(f"[warn] no cached time series for {s}")
-        for f in files:
-            df = pd.read_parquet(f)
-            q = df["streamflow"]
-            valid = q.notna()
-            rows.append(dict(
-                gauge_id=f.stem, subset=s, n_days=len(df), n_valid=int(valid.sum()),
-                valid_years=valid.sum() / 365.25, missing_frac=1 - valid.sum() / n_window,
-                first_valid=q.first_valid_index(), last_valid=q.last_valid_index(),
-                n_negative=int((q < 0).sum()),
-            ))
-            series[f.stem] = df
-    report = pd.DataFrame(rows).set_index("gauge_id")
-    report["keep"] = (report.valid_years >= min_valid_years) & (report.missing_frac <= max_missing_frac) & (report.n_negative == 0)
-    report.to_csv(out_dir / "quality_report.csv")
-    print(report.groupby("subset").agg(pulled=("keep", "size"), kept=("keep", "sum"),
-                                       median_valid_years=("valid_years", "median")).to_string())
-
-    kept = report.index[report.keep]
-    pd.Series(kept, name="gauge_id").to_frame().join(report["subset"], on="gauge_id").to_csv(out_dir / "basin_list.csv", index=False)
-
-    # time series: one parquet per sub-dataset, long format
-    for s in subsets:
-        ids = [g for g in kept if report.at[g, "subset"] == s]
-        if not ids:
             continue
         sub_dir = out_dir / "timeseries" / s
         sub_dir.mkdir(parents=True, exist_ok=True)
         for old in sub_dir.glob("part-*.parquet"):
             old.unlink()
         for i in range(shards):
-            part = ids[i::shards]  # interleave so shards have similar size
-            long = pd.concat({g: series[g] for g in part}, names=["gauge_id"]).reset_index()
+            part = files[i::shards]  # interleave so shards have similar size
+            long = pd.concat({f.stem: pd.read_parquet(f) for f in part}, names=["gauge_id"]).reset_index()
             long.to_parquet(sub_dir / f"part-{i}.parquet", index=False, compression="zstd", compression_level=9)
+        all_ids += [f.stem for f in files]
+        print(f"[write] {s}: {len(files)} gauges -> {sub_dir}")
 
-    # attributes: merge the three files per subset, keep only kept basins, stack subsets
+    # attributes: merge the three files per subset, keep gauges that have a time series, stack subsets
     frames = []
     for s in subsets:
         parts = [pd.read_csv(raw_dir / "attributes" / s / f"attributes_{k}_{s}.csv", index_col="gauge_id")
                  for k in ATTR_KINDS if (raw_dir / "attributes" / s / f"attributes_{k}_{s}.csv").exists()]
         if parts:
             a = pd.concat(parts, axis=1)
-            a = a.loc[a.index.intersection(kept)].assign(subset=s)
+            a = a.loc[a.index.intersection(all_ids)].assign(subset=s)
             frames.append(a)
     attrs = pd.concat(frames)
     attrs.to_parquet(out_dir / "attributes.parquet")
-    print(f"kept {len(kept)} basins; attributes {attrs.shape}; wrote {out_dir}")
+    print(f"wrote {len(all_ids)} gauges; attributes {attrs.shape}; to {out_dir}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--subsets", nargs="+", default=DEFAULT_SUBSETS)
     ap.add_argument("--columns", nargs="+", default=DEFAULT_COLUMNS, help="time series columns to keep")
-    ap.add_argument("--start", default="1981-01-01")
-    ap.add_argument("--end", default="2014-12-31")
-    ap.add_argument("--min-valid-years", type=float, default=15)
-    ap.add_argument("--max-missing-frac", type=float, default=0.15, help="allowed share of NaN streamflow days in the window")
+    ap.add_argument("--start", default="1981-01-01", help="first day of the stored time series")
+    ap.add_argument("--end", default="2014-12-31", help="last day of the stored time series")
     ap.add_argument("--out-dir", type=Path, default=REPO / "data" / "processed")
     ap.add_argument("--raw-dir", type=Path, default=REPO / "data" / "raw")
     ap.add_argument("--interim-dir", type=Path, default=REPO / "data" / "interim")
     ap.add_argument("--archive", type=Path, help="local Caravan-csv.tar.gz instead of streaming from Zenodo")
     ap.add_argument("--shards", type=int, default=5, help="time series files per sub-dataset (keeps each under GitHub's 100 MB limit)")
     ap.add_argument("--retries", type=int, default=20)
-    ap.add_argument("--skip-pull", action="store_true", help="only (re)apply filters to already cached data")
+    ap.add_argument("--skip-pull", action="store_true", help="only rewrite the outputs from already cached data")
     a = ap.parse_args()
 
     if not a.skip_pull:
         pull(a.subsets, a.columns, a.start, a.end, a.raw_dir, a.interim_dir, a.archive, a.retries)
-    combine(a.subsets, a.raw_dir, a.interim_dir, a.out_dir, a.start, a.end, a.min_valid_years, a.max_missing_frac, a.shards)
+    combine(a.subsets, a.raw_dir, a.interim_dir, a.out_dir, a.shards)
 
 
 if __name__ == "__main__":
