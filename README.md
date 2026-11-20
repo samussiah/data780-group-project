@@ -5,7 +5,7 @@
 
 - `attributes.parquet`: static attributes for every extracted gauge (index `gauge_id`, column `subset`)
 - `timeseries/<subset>/part-N.parquet`: daily forcing + streamflow for every extracted gauge, sharded by gauge so each file stays under GitHub's 100 MB limit
-- `quality_report.csv`, `basin_list.csv`: written by notebook 02: which basins pass the quality filter and why others were dropped. **Filter on `basin_list.csv` when reading the time series or attributes directly.**
+- `quality_report.csv`, `basin_list.csv`: written by `notebooks/01_preprocessing.ipynb`: which basins pass the quality filter and why others were dropped. **Filter on `basin_list.csv` when reading the time series or attributes directly.**
 
 Load a whole region with:
 
@@ -61,6 +61,37 @@ Caveats for the attribute audit:
 - `dis_m3_*` and `run_mm_syr` are **modelled flow**; the proposal excludes flow-derived attributes.
 - The Caravan climate indices are computed over the **full record, test years included**; recompute them from training-period forcing.
 - The `*_cl_*` columns are category codes, not numbers, and the monthly columns are highly redundant with each other.
+
+### Train/test design
+
+`notebooks/01_preprocessing.ipynb` decides which basins train and which test, separately for each of 5 folds. A basin is a test basin in exactly one fold and a train (or buffer) basin in the other four, so after looping over all folds every basin has been tested once.
+
+```mermaid
+flowchart LR
+    A["1,903 extracted gauges"] -->|"quality filter"| B["1,208 US + AUS basins"]
+    B -->|"group basins so no two in a block<br/>are more than 300 km apart"| C["134 spatial blocks<br/>(91 US, 43 AUS)"]
+    C -->|"deal whole blocks into folds,<br/>balancing US and AUS"| D["5 folds"]
+    D --> E{"for each fold k"}
+    E --> F["<b>test</b><br/>basins in fold k"]
+    E --> G["<b>buffer</b><br/>other basins within 100 km<br/>of any test basin"]
+    E --> H["<b>train</b><br/>all remaining basins"]
+```
+
+Within a fold, basins and years are split independently. Models learn from train basins over the training years and are scored on test basins over the test years:
+
+| Basin role in fold k | Train years<br/>1986-10 to 2003-09 | Gap year<br/>2003-10 to 2004-09 | Test years<br/>2004-10 to 2014-09 |
+| --- | --- | --- | --- |
+| **train** | fit models, scalers, PCA, clusters | not used | not used\* |
+| **test** | not used | weather only (feeds the windows) | **scored** |
+| **buffer** | not used | not used | not used |
+
+\*Except kNN donor transfer, which borrows donors' observed test-year flow (a gauged neighbour really is running today); state this when comparing donor methods with LightGBM.
+
+The buffer keeps near-neighbours of a test basin out of training. Each test basin gets a 100 km ring, and any non-test basin inside a ring is set aside for that fold:
+
+![One fold: test blocks, 100 km buffer rings around each test basin, buffer basins inside the rings, and train basins outside them](docs/figures/fold-buffer-schematic.svg)
+
+The rings follow test basins, not block edges, so a basin can be `train` in one fold and `buffer` in another. `fold_roles.csv` stores each training basin's distance to the nearest test basin, so a different buffer can be applied by filtering on `dist_to_test_km` without rerunning the notebook.
 
 ### Bookkeeping files (`data/processed/`)
 

@@ -1,6 +1,6 @@
 # Handoff: modelling workstreams
 
-Two parallel tracks start from here: **LightGBM** and **combined spatial + attribute donors**. Both use the same data, folds and scoring, so their results can go into one comparison table.
+Two parallel tracks start from here: **LightGBM** and **combined spatial + attribute donors** (kNN with a blended distance). A **Ridge regression** baseline and **k-means donors** (proposed below) round out the comparison. All of them use the same data, folds and scoring, so their results can go into one comparison table.
 
 ## Where things stand
 
@@ -66,7 +66,41 @@ These rows are an ablation, not tuned results. Skill is higher in the US (NSE ab
   - weight features (e.g. by LightGBM importance, which links the two tracks)
   - drop terrain features that don't track flow
   - log-transform skewed attributes before standardising
-- **Nice to have:** k-means donors (all training basins in the test basin's cluster), which is the kNN vs k-means comparison the midway feedback asked for.
+- **Related:** k-means donors, proposed as an extension of notebook 03 (see below).
+
+## Baseline: Ridge regression
+
+**Goal:** a linear floor for the model-based track. The proposal and the midway report both name Ridge as the baseline. If LightGBM can't clearly beat it, that is a finding in its own right.
+
+- **Same pipeline as Track 1.** Same inputs (daily table joined to static features), same target (`log_streamflow`), same per-fold loop and back-transform. Only the estimator changes (`sklearn.linear_model.Ridge`), so whoever builds the LightGBM data loading can add Ridge with little extra work.
+- **Arms:** weather only, and weather + static attributes. Add a one-hot cluster-ID arm if Track 1's k-means code is ready, so the cluster question is asked of both models.
+- **Preprocessing:** standardise every feature using means and standard deviations from the fold's training basins over the training years. Ridge is scale-sensitive; LightGBM isn't.
+- **Penalty strength:** sweep λ on a log grid (e.g. 10⁻³ to 10³). Choose it by leaving out one block of training basins at a time, as in ground rule 2. Call it λ in the report so it isn't confused with KGE's α.
+- **Size:** subsample training days the same way as Track 1. A linear model doesn't need millions of rows.
+- **Expected limits:** a linear model can't capture interactions such as snowmelt (temperature × snow storage) or thresholds such as zero flow. Where Ridge fails relative to LightGBM shows what the non-linearity buys.
+- **Output:** `data/results/ridge_scores.csv`, same columns as the other score files.
+
+## Proposed: k-means donors in notebook 03
+
+**Status:** proposed, not implemented yet. This is the kNN vs k-means comparison the midway feedback asked for (suggestion B). It answers the project's core question: does *cluster membership* pick good donors?
+
+**Idea:** keep notebook 03's transfer rule (average the donors' daily flow) and change only how the donor group is formed:
+
+| | kNN donors (implemented) | k-means donors (proposed) |
+| --- | --- | --- |
+| Donor group | the *k* training basins nearest the test basin | all training basins in the test basin's cluster |
+| Group shape | centred on each test basin | fixed partition chosen before seeing the test basin |
+| Group size | always *k* | varies by cluster |
+
+**Sketch:**
+1. In each fold, fit `KMeans` on the training basins in the same standardised space as the attribute kNN (curated features or PCA), so the two methods see identical inputs.
+2. Assign each test basin to its nearest centroid. Its donors are the training basins in that cluster, from the same region (as in notebook 03).
+3. Average their flow with equal weights (or inverse distance to the test basin, as a variant).
+4. If a cluster has no same-region training basins, fall back to the nearest cluster that does, and count how often that happens.
+5. Sweep the number of clusters (e.g. 5, 10, 20, 40). Call it `n_clusters`, to keep it apart from kNN's *k*.
+6. Append the rows to the score table with `metric = "kmeans_curated"` or `"kmeans_pca"`, so Step 6's summaries pick them up unchanged.
+
+**Fair comparison:** with about 870 training basins per fold, 40 clusters gives roughly 20 donors per cluster. Compare it against kNN with k = 20, so the two methods differ in how they choose donors, not in how many they average.
 
 ## Open decisions for the group
 
